@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"reflect"
+
+	"github.com/pkg/errors"
 )
 
 var (
@@ -30,6 +32,31 @@ func New(s interface{}) *Struct {
 		value:   strctVal(s),
 		TagName: DefaultTagName,
 	}
+}
+
+// StructToMap is a usual gateway between static and dynamic typing
+// it converts struct to dynamic object (map[string]interface{})
+// it returns error instead of panic on non-struct as in structs.Map
+func StructToMap(s interface{}) (map[string]interface{}, error) {
+	str, err := NewSafe(s)
+	if err != nil {
+		return nil, err
+	}
+	str.TagName = "json" // use json tag for structs
+	return str.Map(), nil
+}
+
+// NewSafe creates new *Struct if s is struct
+func NewSafe(s interface{}) (*Struct, error) {
+	v, err := StructValue(s)
+	if err != nil {
+		return nil, err
+	}
+	return &Struct{
+		raw:     s,
+		value:   v,
+		TagName: DefaultTagName,
+	}, nil
 }
 
 // Map converts the given struct to a map[string]interface{}, where the keys
@@ -425,7 +452,7 @@ func (s *Struct) structFields() []reflect.StructField {
 	return f
 }
 
-func strctVal(s interface{}) reflect.Value {
+func StructValue(s interface{}) (reflect.Value, error) {
 	v := reflect.ValueOf(s)
 
 	// if pointer get the underlying element≤
@@ -434,7 +461,16 @@ func strctVal(s interface{}) reflect.Value {
 	}
 
 	if v.Kind() != reflect.Struct {
-		panic("not struct")
+		return reflect.Value{}, errors.Wrapf(ErrIsNotStruct, "kind:%v", v.Kind())
+	}
+
+	return v, nil
+}
+
+func strctVal(s interface{}) reflect.Value {
+	v, err := StructValue(s)
+	if err != nil {
+		panic(err.Error())
 	}
 
 	return v
